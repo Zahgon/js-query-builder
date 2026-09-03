@@ -1,0 +1,433 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>QueryBuilder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">js-query-builder</a> &gt; <a href="index.source.html" class="el_package">io.github.coderello.querybuilder</a> &gt; <span class="el_source">QueryBuilder.java</span></div><h1>QueryBuilder.java</h1><pre class="source lang-java linenums">package io.github.coderello.querybuilder;
+
+import io.github.coderello.querybuilder.internal.JsObject;
+import io.github.coderello.querybuilder.internal.JsType;
+import io.github.coderello.querybuilder.internal.JsUri;
+import io.github.coderello.querybuilder.internal.JsValues;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+/**
+ * Port of {@code src/QueryBuilder.js} — builds a query string compatible with
+ * {@code spatie/laravel-query-builder}.
+ *
+ * &lt;p&gt;Every method returns {@code this}, so calls chain exactly as in the source.
+ *
+ * &lt;p&gt;The variadic methods keep the source's dynamic contract: they accept strings, numbers,
+ * arrays and objects, recurse into nested arrays, and throw {@link QueryBuilderException} on
+ * anything else. Typed convenience overloads are provided alongside and delegate to the same
+ * code, so they cannot drift from it.
+ *
+ * &lt;p&gt;&lt;b&gt;Not thread-safe&lt;/b&gt; at the instance level, matching the source. The static custom
+ * parameter names are shared process-wide (see {@link #defineCustomParameterNames}).
+ */
+public class QueryBuilder {
+
+<span class="fc" id="L31">    private static final List&lt;String&gt; SCALAR_OR_ARRAY =</span>
+<span class="fc" id="L32">            List.of(JsType.STRING, JsType.NUMBER, JsType.ARRAY);</span>
+
+    /**
+     * {@code QueryBuilder._customParameterNames} — static, and therefore shared by every
+     * instance in the process, exactly as in the source.
+     *
+     * &lt;p&gt;Held in a {@code volatile} field containing an immutable snapshot. JavaScript is
+     * single-threaded so the source needs no such care; without it, a Java caller reconfiguring
+     * names while another thread builds would see a torn map. The observable single-threaded
+     * behaviour is unchanged.
+     */
+    private static volatile Map&lt;String, String&gt; customParameterNames;
+
+    private String baseUrl;
+<span class="fc" id="L46">    private Map&lt;String, Object&gt; filters = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L47">    private List&lt;String&gt; sorts = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L48">    private List&lt;String&gt; includes = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L49">    private List&lt;String&gt; appends = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L50">    private Map&lt;String, Object&gt; fields = new LinkedHashMap&lt;&gt;();</span>
+    private Object page;
+<span class="fc" id="L52">    private Map&lt;String, Object&gt; params = new LinkedHashMap&lt;&gt;();</span>
+
+    /** {@code constructor(baseUrl = '')}. */
+    public QueryBuilder() {
+<span class="fc" id="L56">        this(&quot;&quot;);</span>
+<span class="fc" id="L57">    }</span>
+
+<span class="fc" id="L59">    public QueryBuilder(String baseUrl) {</span>
+<span class="fc" id="L60">        this.baseUrl = baseUrl;</span>
+<span class="fc" id="L61">    }</span>
+
+    // -----------------------------------------------------------------------
+    // Custom parameter names (static, process-wide)
+    // -----------------------------------------------------------------------
+
+    /**
+     * {@code static defineCustomParameterNames(customParameterNames)}.
+     *
+     * &lt;p&gt;Sets process-wide state: builders created before this call are affected too, because the
+     * names are resolved at {@link #build()} time. That leakage is the source's behaviour and is
+     * relied on by its tests, which reset it in {@code beforeEach}.
+     *
+     * &lt;p&gt;A {@code null} argument is accepted and behaves as the source does — the falsy check in
+     * {@code getParameterName} then makes every lookup fall through to the default name.
+     */
+    public static void defineCustomParameterNames(Map&lt;String, String&gt; customParameterNames) {
+        QueryBuilder.customParameterNames =
+<span class="fc bfc" id="L79" title="All 2 branches covered.">                customParameterNames == null ? null : Map.copyOf(customParameterNames);</span>
+<span class="fc" id="L80">    }</span>
+
+    /** {@code static forgetCustomParameterNames()} — idempotent, as {@code delete} is. */
+    public static void forgetCustomParameterNames() {
+<span class="fc" id="L84">        QueryBuilder.customParameterNames = null;</span>
+<span class="fc" id="L85">    }</span>
+
+    /** {@code static getParameterName(parameter)}. */
+    public static String getParameterName(String parameter) {
+<span class="fc" id="L89">        Map&lt;String, String&gt; names = customParameterNames;</span>
+        // `this._customParameterNames &amp;&amp; this._customParameterNames.hasOwnProperty(parameter)`
+        // — a truthiness check, so a null (or, in JS, any falsy) mapping yields the default.
+<span class="fc bfc" id="L92" title="All 4 branches covered.">        return names != null &amp;&amp; names.containsKey(parameter) ? names.get(parameter) : parameter;</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Base URL
+    // -----------------------------------------------------------------------
+
+    public QueryBuilder baseUrl(String baseUrl) {
+<span class="fc" id="L100">        this.baseUrl = baseUrl;</span>
+<span class="fc" id="L101">        return this;</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Params
+    // -----------------------------------------------------------------------
+
+    /** {@code param(...args)} — either one object, or a key and a string/number/array value. */
+    public QueryBuilder param(Object... args) {
+<span class="fc" id="L110">        return keyedSetter(args, params, SCALAR_OR_ARRAY, this::param);</span>
+    }
+
+    public QueryBuilder param(String key, String value) {
+<span class="fc" id="L114">        return param(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder param(String key, Number value) {
+<span class="fc" id="L118">        return param(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder param(String key, List&lt;?&gt; value) {
+<span class="fc" id="L122">        return param(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder param(Map&lt;String, ?&gt; values) {
+<span class="fc" id="L126">        return param(new Object[] {values});</span>
+    }
+
+    /** {@code forgetParam(...args)} — with no arguments, clears everything. */
+    public QueryBuilder forgetParam(Object... args) {
+<span class="fc" id="L131">        return forgetKeyed(args, () -&gt; params = new LinkedHashMap&lt;&gt;(), params::remove,</span>
+                this::forgetParam);
+    }
+
+    // -----------------------------------------------------------------------
+    // Includes
+    // -----------------------------------------------------------------------
+
+    public QueryBuilder include(Object... args) {
+<span class="fc" id="L140">        return listAppender(args, includes, this::include);</span>
+    }
+
+    public QueryBuilder forgetInclude(Object... args) {
+<span class="fc" id="L144">        return forgetFromList(args, () -&gt; includes = new ArrayList&lt;&gt;(), includes,</span>
+                this::forgetInclude);
+    }
+
+    // -----------------------------------------------------------------------
+    // Appends
+    // -----------------------------------------------------------------------
+
+    public QueryBuilder append(Object... args) {
+<span class="fc" id="L153">        return listAppender(args, appends, this::append);</span>
+    }
+
+    public QueryBuilder forgetAppend(Object... args) {
+<span class="fc" id="L157">        return forgetFromList(args, () -&gt; appends = new ArrayList&lt;&gt;(), appends, this::forgetAppend);</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Filters
+    // -----------------------------------------------------------------------
+
+    public QueryBuilder filter(Object... args) {
+<span class="fc" id="L165">        return keyedSetter(args, filters, SCALAR_OR_ARRAY, this::filter);</span>
+    }
+
+    public QueryBuilder filter(String key, String value) {
+<span class="fc" id="L169">        return filter(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder filter(String key, Number value) {
+<span class="fc" id="L173">        return filter(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder filter(String key, List&lt;?&gt; value) {
+<span class="fc" id="L177">        return filter(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder filter(Map&lt;String, ?&gt; values) {
+<span class="fc" id="L181">        return filter(new Object[] {values});</span>
+    }
+
+    public QueryBuilder forgetFilter(Object... args) {
+<span class="fc" id="L185">        return forgetKeyed(args, () -&gt; filters = new LinkedHashMap&lt;&gt;(), filters::remove,</span>
+                this::forgetFilter);
+    }
+
+    // -----------------------------------------------------------------------
+    // Sorts
+    // -----------------------------------------------------------------------
+
+    public QueryBuilder sort(Object... args) {
+<span class="fc" id="L194">        return listAppender(args, sorts, this::sort);</span>
+    }
+
+    public QueryBuilder forgetSort(Object... args) {
+<span class="fc" id="L198">        return forgetFromList(args, () -&gt; sorts = new ArrayList&lt;&gt;(), sorts, this::forgetSort);</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Fields
+    // -----------------------------------------------------------------------
+
+    /** {@code fields(...args)} — unlike {@code filter}, the value must be an array. */
+    public QueryBuilder fields(Object... args) {
+<span class="fc" id="L207">        return keyedSetter(args, fields, List.of(JsType.ARRAY), this::fields);</span>
+    }
+
+    public QueryBuilder fields(String key, List&lt;?&gt; value) {
+<span class="fc" id="L211">        return fields(new Object[] {key, value});</span>
+    }
+
+    public QueryBuilder fields(Map&lt;String, ?&gt; values) {
+<span class="fc" id="L215">        return fields(new Object[] {values});</span>
+    }
+
+    public QueryBuilder forgetFields(Object... args) {
+<span class="fc" id="L219">        return forgetKeyed(args, () -&gt; fields = new LinkedHashMap&lt;&gt;(), fields::remove,</span>
+                this::forgetFields);
+    }
+
+    // -----------------------------------------------------------------------
+    // Page
+    // -----------------------------------------------------------------------
+
+    /** {@code page(page)} — accepts a number or a string; anything else throws. */
+    public QueryBuilder page(Object page) {
+<span class="fc" id="L229">        String type = JsType.of(page);</span>
+<span class="fc bfc" id="L230" title="All 4 branches covered.">        if (!JsType.NUMBER.equals(type) &amp;&amp; !JsType.STRING.equals(type)) {</span>
+<span class="fc" id="L231">            throw new QueryBuilderException();</span>
+        }
+<span class="fc" id="L233">        this.page = page;</span>
+<span class="fc" id="L234">        return this;</span>
+    }
+
+    public QueryBuilder forgetPage() {
+<span class="fc" id="L238">        this.page = null;</span>
+<span class="fc" id="L239">        return this;</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Control flow
+    // -----------------------------------------------------------------------
+
+    /** {@code tap(callback)} — always invoked; the return value is discarded. */
+    public QueryBuilder tap(Consumer&lt;QueryBuilder&gt; callback) {
+<span class="fc bfc" id="L248" title="All 2 branches covered.">        if (!JsType.isFunction(callback)) {</span>
+<span class="fc" id="L249">            throw new QueryBuilderException();</span>
+        }
+<span class="fc" id="L251">        callback.accept(this);</span>
+<span class="fc" id="L252">        return this;</span>
+    }
+
+    /**
+     * {@code when(condition, callback)}.
+     *
+     * &lt;p&gt;The condition is evaluated for &lt;em&gt;truthiness&lt;/em&gt;, not equality with {@code true}: an
+     * empty string skips the callback while {@code []} runs it. A {@link Supplier} condition is
+     * invoked first, mirroring the source's {@code condition()} branch.
+     */
+    public QueryBuilder when(Object condition, Consumer&lt;QueryBuilder&gt; callback) {
+<span class="fc bfc" id="L263" title="All 2 branches covered.">        if (!JsType.isFunction(callback)) {</span>
+<span class="fc" id="L264">            throw new QueryBuilderException();</span>
+        }
+<span class="fc bfc" id="L266" title="All 2 branches covered.">        Object resolved = condition instanceof Supplier&lt;?&gt; supplier ? supplier.get() : condition;</span>
+<span class="fc bfc" id="L267" title="All 2 branches covered.">        if (JsValues.isTruthy(resolved)) {</span>
+<span class="fc" id="L268">            callback.accept(this);</span>
+        }
+<span class="fc" id="L270">        return this;</span>
+    }
+
+    public QueryBuilder when(boolean condition, Consumer&lt;QueryBuilder&gt; callback) {
+<span class="fc" id="L274">        return when((Object) condition, callback);</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Build
+    // -----------------------------------------------------------------------
+
+    /**
+     * {@code build()} — assembles the query string.
+     *
+     * &lt;p&gt;Two details are load-bearing:
+     * &lt;ul&gt;
+     *   &lt;li&gt;The page is emitted under {@code if (this._page)}, a truthiness test, so
+     *       {@code page(0)} and {@code page(&quot;&quot;)} produce no parameter at all.&lt;/li&gt;
+     *   &lt;li&gt;Parameters are sorted by key with {@code (a, b) =&gt; a[0] &lt; b[0] ? -1 : 1}. That
+     *       comparator never returns 0, yet V8 was observed to keep equal keys in insertion order
+     *       even across 25 duplicates, so a &lt;em&gt;stable&lt;/em&gt; sort on the key reproduces it.&lt;/li&gt;
+     * &lt;/ul&gt;
+     */
+    public String build() {
+<span class="fc" id="L294">        List&lt;String[]&gt; parameters = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L296" title="All 2 branches covered.">        for (JsObject.Entry entry : JsObject.entries(filters)) {</span>
+<span class="fc" id="L297">            parameters.add(new String[] {</span>
+<span class="fc" id="L298">                    getParameterName(&quot;filter&quot;) + &quot;[&quot; + entry.key() + &quot;]&quot;,</span>
+<span class="fc" id="L299">                    JsValues.toJsString(entry.value())});</span>
+<span class="fc" id="L300">        }</span>
+
+<span class="fc bfc" id="L302" title="All 2 branches covered.">        if (!sorts.isEmpty()) {</span>
+<span class="fc" id="L303">            parameters.add(new String[] {getParameterName(&quot;sort&quot;), String.join(&quot;,&quot;, sorts)});</span>
+        }
+<span class="fc bfc" id="L305" title="All 2 branches covered.">        if (!includes.isEmpty()) {</span>
+<span class="fc" id="L306">            parameters.add(new String[] {getParameterName(&quot;include&quot;), String.join(&quot;,&quot;, includes)});</span>
+        }
+<span class="fc bfc" id="L308" title="All 2 branches covered.">        if (!appends.isEmpty()) {</span>
+<span class="fc" id="L309">            parameters.add(new String[] {getParameterName(&quot;append&quot;), String.join(&quot;,&quot;, appends)});</span>
+        }
+
+<span class="fc bfc" id="L312" title="All 2 branches covered.">        for (JsObject.Entry entry : JsObject.entries(fields)) {</span>
+<span class="fc" id="L313">            parameters.add(new String[] {</span>
+<span class="fc" id="L314">                    getParameterName(&quot;fields&quot;) + &quot;[&quot; + entry.key() + &quot;]&quot;,</span>
+<span class="fc" id="L315">                    JsValues.join(JsObject.toList(entry.value()), &quot;,&quot;)});</span>
+<span class="fc" id="L316">        }</span>
+
+<span class="fc bfc" id="L318" title="All 2 branches covered.">        if (JsValues.isTruthy(page)) {</span>
+<span class="fc" id="L319">            parameters.add(new String[] {getParameterName(&quot;page&quot;), JsValues.toJsString(page)});</span>
+        }
+
+<span class="fc bfc" id="L322" title="All 2 branches covered.">        for (JsObject.Entry entry : JsObject.entries(params)) {</span>
+<span class="fc" id="L323">            parameters.add(new String[] {entry.key(), JsValues.toJsString(entry.value())});</span>
+<span class="fc" id="L324">        }</span>
+
+<span class="fc" id="L326">        parameters.sort(Comparator.comparing(entry -&gt; entry[0]));</span>
+
+<span class="fc" id="L328">        StringBuilder query = new StringBuilder();</span>
+<span class="fc bfc" id="L329" title="All 2 branches covered.">        for (int i = 0; i &lt; parameters.size(); i++) {</span>
+<span class="fc bfc" id="L330" title="All 2 branches covered.">            if (i &gt; 0) {</span>
+<span class="fc" id="L331">                query.append('&amp;');</span>
+            }
+<span class="fc" id="L333">            query.append(JsUri.encodeURIComponent(parameters.get(i)[0]))</span>
+<span class="fc" id="L334">                    .append('=')</span>
+<span class="fc" id="L335">                    .append(JsUri.encodeURIComponent(parameters.get(i)[1]));</span>
+        }
+
+<span class="fc" id="L338">        return baseUrl + &quot;?&quot; + query;</span>
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared shapes
+    //
+    // param/filter/fields and their forget* counterparts are byte-for-byte identical in the
+    // source apart from the target collection and the accepted value types. Factoring them here
+    // keeps the validation rules in one place rather than duplicated six times.
+    // -----------------------------------------------------------------------
+
+    private interface Recurse {
+        QueryBuilder apply(Object... args);
+    }
+
+    /** The {@code param} / {@code filter} / {@code fields} shape. */
+    private QueryBuilder keyedSetter(Object[] args, Map&lt;String, Object&gt; target,
+            List&lt;String&gt; allowedValueTypes, Recurse self) {
+<span class="fc bfc" id="L356" title="All 3 branches covered.">        switch (args.length) {</span>
+            case 1 -&gt; {
+<span class="fc bfc" id="L358" title="All 2 branches covered.">                if (!JsType.OBJECT.equals(JsType.of(args[0]))) {</span>
+<span class="fc" id="L359">                    throw new QueryBuilderException();</span>
+                }
+<span class="fc bfc" id="L361" title="All 2 branches covered.">                for (JsObject.Entry entry : JsObject.entries(asObject(args[0]))) {</span>
+<span class="fc" id="L362">                    self.apply(entry.key(), entry.value());</span>
+<span class="fc" id="L363">                }</span>
+<span class="fc" id="L364">            }</span>
+            case 2 -&gt; {
+<span class="fc bfc" id="L366" title="All 2 branches covered.">                if (!JsType.STRING.equals(JsType.of(args[0]))</span>
+<span class="fc bfc" id="L367" title="All 2 branches covered.">                        || !allowedValueTypes.contains(JsType.of(args[1]))) {</span>
+<span class="fc" id="L368">                    throw new QueryBuilderException();</span>
+                }
+<span class="fc" id="L370">                target.put(args[0].toString(), args[1]);</span>
+<span class="fc" id="L371">            }</span>
+<span class="fc" id="L372">            default -&gt; throw new QueryBuilderException();</span>
+        }
+<span class="fc" id="L374">        return this;</span>
+    }
+
+    /** The {@code forgetParam} / {@code forgetFilter} / {@code forgetFields} shape. */
+    private QueryBuilder forgetKeyed(Object[] args, Runnable clearAll,
+            Consumer&lt;String&gt; removeOne, Recurse self) {
+<span class="fc bfc" id="L380" title="All 2 branches covered.">        if (args.length == 0) {</span>
+<span class="fc" id="L381">            clearAll.run();</span>
+<span class="fc" id="L382">            return this;</span>
+        }
+<span class="fc bfc" id="L384" title="All 2 branches covered.">        for (Object arg : args) {</span>
+<span class="fc bfc" id="L385" title="All 3 branches covered.">            switch (JsType.of(arg)) {</span>
+<span class="fc" id="L386">                case JsType.ARRAY -&gt; self.apply(JsObject.toList(arg).toArray());</span>
+<span class="fc" id="L387">                case JsType.STRING -&gt; removeOne.accept(arg.toString());</span>
+<span class="fc" id="L388">                default -&gt; throw new QueryBuilderException();</span>
+            }
+        }
+<span class="fc" id="L391">        return this;</span>
+    }
+
+    /** The {@code include} / {@code append} / {@code sort} shape. */
+    private QueryBuilder listAppender(Object[] args, List&lt;String&gt; target, Recurse self) {
+<span class="fc bfc" id="L396" title="All 2 branches covered.">        for (Object arg : args) {</span>
+<span class="fc bfc" id="L397" title="All 3 branches covered.">            switch (JsType.of(arg)) {</span>
+<span class="fc" id="L398">                case JsType.ARRAY -&gt; self.apply(JsObject.toList(arg).toArray());</span>
+<span class="fc" id="L399">                case JsType.STRING -&gt; target.add(arg.toString());</span>
+<span class="fc" id="L400">                default -&gt; throw new QueryBuilderException();</span>
+            }
+        }
+<span class="fc" id="L403">        return this;</span>
+    }
+
+    /** The {@code forgetInclude} / {@code forgetAppend} / {@code forgetSort} shape. */
+    private QueryBuilder forgetFromList(Object[] args, Runnable clearAll, List&lt;String&gt; target,
+            Recurse self) {
+<span class="fc bfc" id="L409" title="All 2 branches covered.">        if (args.length == 0) {</span>
+<span class="fc" id="L410">            clearAll.run();</span>
+<span class="fc" id="L411">            return this;</span>
+        }
+<span class="fc bfc" id="L413" title="All 2 branches covered.">        for (Object arg : args) {</span>
+<span class="fc bfc" id="L414" title="All 3 branches covered.">            switch (JsType.of(arg)) {</span>
+<span class="fc" id="L415">                case JsType.ARRAY -&gt; self.apply(JsObject.toList(arg).toArray());</span>
+<span class="fc" id="L416">                case JsType.STRING -&gt; target.removeIf(v -&gt; v.equals(arg.toString()));</span>
+<span class="fc" id="L417">                default -&gt; throw new QueryBuilderException();</span>
+            }
+        }
+<span class="fc" id="L420">        return this;</span>
+    }
+
+    private static Map&lt;?, ?&gt; asObject(Object value) {
+<span class="fc bfc" id="L424" title="All 2 branches covered.">        if (value instanceof Map&lt;?, ?&gt; map) {</span>
+<span class="fc" id="L425">            return map;</span>
+        }
+        // JavaScript would enumerate an arbitrary instance's own enumerable properties. The
+        // source gives no guidance for translating that, and guessing a reflection rule would
+        // invent behaviour, so only a Map models a JS object literal here.
+<span class="fc" id="L430">        throw new QueryBuilderException();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

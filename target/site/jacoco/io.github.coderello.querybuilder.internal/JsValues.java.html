@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsValues.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">js-query-builder</a> &gt; <a href="index.source.html" class="el_package">io.github.coderello.querybuilder.internal</a> &gt; <span class="el_source">JsValues.java</span></div><h1>JsValues.java</h1><pre class="source lang-java linenums">package io.github.coderello.querybuilder.internal;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * JavaScript value semantics with no Java equivalent.
+ *
+ * &lt;p&gt;Two of them decide observable output in this library:
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;Truthiness&lt;/b&gt; — {@code build()} emits the page only under {@code if (this._page)}, so
+ *       {@code page(0)}, {@code page(&quot;&quot;)} and {@code page(NaN)} are all silently dropped while
+ *       {@code page(&quot;0&quot;)} is kept. A {@code != null} check gets every one of those wrong.&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;Number to string&lt;/b&gt; — values are interpolated into the query string, and
+ *       {@code Double.toString} disagrees with JavaScript on exactly the shapes that appear
+ *       ({@code 5} vs {@code 5.0}, {@code 1e+21} vs {@code 1.0E21}).&lt;/li&gt;
+ * &lt;/ul&gt;
+ */
+public final class JsValues {
+
+    private JsValues() {
+    }
+
+    /**
+     * JavaScript truthiness.
+     *
+     * &lt;p&gt;The falsy set is exactly {@code false}, {@code 0}, {@code -0}, {@code &quot;&quot;}, {@code null},
+     * {@code undefined}, {@code NaN}. Everything else — including {@code &quot;0&quot;}, {@code &quot; &quot;},
+     * {@code []} and {@code {}} — is truthy.
+     */
+    public static boolean isTruthy(Object v) {
+<span class="fc bfc" id="L33" title="All 2 branches covered.">        if (v == null) {</span>
+<span class="fc" id="L34">            return false;</span>
+        }
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        if (v instanceof Boolean b) {</span>
+<span class="fc" id="L37">            return b;</span>
+        }
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        if (v instanceof CharSequence s) {</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">            return !s.isEmpty();</span>
+        }
+<span class="fc bfc" id="L42" title="All 2 branches covered.">        if (v instanceof Number n) {</span>
+<span class="fc" id="L43">            double d = n.doubleValue();</span>
+            // Covers 0, -0 and NaN in one comparison.
+<span class="fc bfc" id="L45" title="All 4 branches covered.">            return d != 0.0 &amp;&amp; !Double.isNaN(d);</span>
+        }
+<span class="fc" id="L47">        return true;</span>
+    }
+
+    /**
+     * The JavaScript {@code String(v)} conversion, which is what template-literal interpolation
+     * and {@code Array.prototype.join} perform.
+     *
+     * &lt;pre&gt;
+     * String(5)        === &quot;5&quot;          String(1.5)   === &quot;1.5&quot;
+     * String(1e21)     === &quot;1e+21&quot;      String(null)  === &quot;null&quot;
+     * String([1,2])    === &quot;1,2&quot;        String([])    === &quot;&quot;
+     * String({})       === &quot;[object Object]&quot;
+     * &lt;/pre&gt;
+     */
+    public static String toJsString(Object v) {
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (v == null) {</span>
+            // String(null) is &quot;null&quot; in JavaScript, and String.valueOf agrees.
+<span class="fc" id="L64">            return String.valueOf(v);</span>
+        }
+<span class="fc bfc" id="L66" title="All 2 branches covered.">        if (v instanceof CharSequence s) {</span>
+<span class="fc" id="L67">            return s.toString();</span>
+        }
+<span class="fc bfc" id="L69" title="All 2 branches covered.">        if (v instanceof Number n) {</span>
+<span class="fc" id="L70">            return numberToString(n);</span>
+        }
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        if (v instanceof Boolean b) {</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">            return b ? &quot;true&quot; : &quot;false&quot;;</span>
+        }
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (v instanceof List&lt;?&gt; list) {</span>
+<span class="fc" id="L76">            return join(list, &quot;,&quot;);</span>
+        }
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (v.getClass().isArray()) {</span>
+<span class="fc" id="L79">            return join(JsObject.arrayToList(v), &quot;,&quot;);</span>
+        }
+<span class="fc" id="L81">        return OBJECT_TAG;</span>
+    }
+
+    /**
+     * {@code String({})} — the internal-class tag JavaScript produces for any plain object or
+     * class instance without a custom {@code toString}.
+     */
+    private static final String OBJECT_TAG = &quot;[object Object]&quot;;
+
+    /**
+     * {@code Array.prototype.join} — {@code null} and {@code undefined} elements render as the
+     * empty string rather than as {@code &quot;null&quot;}.
+     */
+    public static String join(List&lt;?&gt; list, String separator) {
+<span class="fc" id="L95">        StringBuilder sb = new StringBuilder();</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        for (int i = 0; i &lt; list.size(); i++) {</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">            if (i &gt; 0) {</span>
+<span class="fc" id="L98">                sb.append(separator);</span>
+            }
+<span class="fc" id="L100">            Object e = list.get(i);</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">            if (e != null) {</span>
+<span class="fc" id="L102">                sb.append(toJsString(e));</span>
+            }
+        }
+<span class="fc" id="L105">        return sb.toString();</span>
+    }
+
+    /**
+     * The ECMAScript {@code Number::toString} algorithm — the shortest decimal that round-trips.
+     *
+     * &lt;p&gt;Java's {@code Double.toString} is a different algorithm and diverges on the values a
+     * query string actually carries: it renders {@code 5.0} where JavaScript gives {@code &quot;5&quot;},
+     * and {@code 1.0E21} where JavaScript gives {@code &quot;1e+21&quot;}.
+     *
+     * &lt;p&gt;Integral {@link Integer}, {@link Long}, {@link Short}, {@link Byte} and
+     * {@link java.math.BigInteger} inputs are rendered from their exact value rather than being
+     * routed through a {@code double} first. Every number JavaScript can represent produces an
+     * identical result either way; they differ only above 2^53, where JavaScript has already lost
+     * the value — {@code String(9007199254740993)} is {@code &quot;9007199254740992&quot;} there, because
+     * the literal cannot survive parsing. A Java caller passing such a {@code long} means the
+     * exact value, so the exact value is emitted. Recorded as an accepted difference.
+     *
+     * &lt;p&gt;Deliberately the only public overload: an additional {@code numberToString(double)}
+     * would silently win overload resolution for {@code long} arguments, because Java prefers
+     * widening to boxing, and would reintroduce the precision loss described above.
+     */
+    public static String numberToString(Number n) {
+<span class="pc bpc" id="L128" title="3 of 10 branches missed.">        if (n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte</span>
+                || n instanceof java.math.BigInteger) {
+<span class="fc" id="L130">            return n.toString();</span>
+        }
+<span class="fc" id="L132">        return doubleToString(n.doubleValue());</span>
+    }
+
+    private static String doubleToString(double d) {
+<span class="fc bfc" id="L136" title="All 2 branches covered.">        if (!Double.isFinite(d)) {</span>
+            // Java and JavaScript render all three non-finite values identically
+            // (&quot;NaN&quot;, &quot;Infinity&quot;, &quot;-Infinity&quot;), so this is a delegation, not a coincidence
+            // worth restating as literals.
+<span class="fc" id="L140">            return Double.toString(d);</span>
+        }
+<span class="fc bfc" id="L142" title="All 2 branches covered.">        if (d == 0.0) {</span>
+<span class="fc" id="L143">            return &quot;0&quot;; // JavaScript renders -0 as &quot;0&quot;</span>
+        }
+<span class="fc bfc" id="L145" title="All 2 branches covered.">        if (d &lt; 0) {</span>
+<span class="fc" id="L146">            return &quot;-&quot; + doubleToString(-d);</span>
+        }
+
+        // Shortest round-tripping decimal expressed as digits `s` with exponent `n`, per
+        // ECMA-262 Number::toString: value == s * 10^(n-k) where s has k digits.
+<span class="fc" id="L151">        BigDecimal bd = new BigDecimal(shortestRepr(d));</span>
+<span class="fc" id="L152">        String digits = bd.unscaledValue().toString().replaceFirst(&quot;0+$&quot;, &quot;&quot;);</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">        if (digits.isEmpty()) {</span>
+<span class="nc" id="L154">            digits = &quot;0&quot;;</span>
+        }
+<span class="fc" id="L156">        int k = digits.length();</span>
+<span class="fc" id="L157">        int n = bd.precision() - bd.scale();</span>
+
+<span class="fc bfc" id="L159" title="All 4 branches covered.">        if (k &lt;= n &amp;&amp; n &lt;= 21) {</span>
+<span class="fc" id="L160">            return digits + &quot;0&quot;.repeat(n - k);</span>
+        }
+<span class="fc bfc" id="L162" title="All 4 branches covered.">        if (0 &lt; n &amp;&amp; n &lt;= 21) {</span>
+<span class="fc" id="L163">            return digits.substring(0, n) + &quot;.&quot; + digits.substring(n);</span>
+        }
+<span class="fc bfc" id="L165" title="All 4 branches covered.">        if (-6 &lt; n &amp;&amp; n &lt;= 0) {</span>
+<span class="fc" id="L166">            return &quot;0.&quot; + &quot;0&quot;.repeat(-n) + digits;</span>
+        }
+<span class="fc bfc" id="L168" title="All 2 branches covered.">        String mantissa = k == 1 ? digits : digits.charAt(0) + &quot;.&quot; + digits.substring(1);</span>
+<span class="fc bfc" id="L169" title="All 2 branches covered.">        return mantissa + &quot;e&quot; + (n - 1 &gt;= 0 ? &quot;+&quot; : &quot;-&quot;) + Math.abs(n - 1);</span>
+    }
+
+    private static String shortestRepr(double d) {
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">        for (int precision = 1; precision &lt;= 17; precision++) {</span>
+<span class="fc" id="L174">            String candidate = String.format(&quot;%.&quot; + precision + &quot;e&quot;, d);</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">            if (Double.parseDouble(candidate) == d) {</span>
+<span class="fc" id="L176">                return new BigDecimal(candidate).stripTrailingZeros().toPlainString();</span>
+            }
+        }
+<span class="nc" id="L179">        return new BigDecimal(d).toPlainString();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>QueryBuilderException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">js-query-builder</a> &gt; <a href="index.source.html" class="el_package">io.github.coderello.querybuilder</a> &gt; <span class="el_source">QueryBuilderException.java</span></div><h1>QueryBuilderException.java</h1><pre class="source lang-java linenums">package io.github.coderello.querybuilder;
+
+/**
+ * Thrown wherever the source throws {@code new Error()}.
+ *
+ * &lt;p&gt;The JavaScript original raises a bare {@code Error} with an &lt;b&gt;empty message&lt;/b&gt; at every
+ * validation failure — there is no text to carry over, and the source's own tests only assert
+ * {@code toThrowError()} without inspecting a message.
+ *
+ * &lt;p&gt;A dedicated unchecked type is used rather than {@link IllegalArgumentException} so callers
+ * can distinguish a builder rejection from an argument error raised by the JDK itself.
+ */
+public class QueryBuilderException extends RuntimeException {
+
+    private static final long serialVersionUID = 1L;
+
+    /** Mirrors {@code new Error()} — no message, matching the source exactly. */
+    public QueryBuilderException() {
+<span class="fc" id="L19">        super();</span>
+<span class="fc" id="L20">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

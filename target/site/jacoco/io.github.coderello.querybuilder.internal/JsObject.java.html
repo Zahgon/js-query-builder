@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsObject.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">js-query-builder</a> &gt; <a href="index.source.html" class="el_package">io.github.coderello.querybuilder.internal</a> &gt; <span class="el_source">JsObject.java</span></div><h1>JsObject.java</h1><pre class="source lang-java linenums">package io.github.coderello.querybuilder.internal;
+
+import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * {@code Object.entries} with JavaScript's own-property ordering.
+ *
+ * &lt;p&gt;JavaScript enumerates integer-like keys first, in ascending numeric order, and only then the
+ * remaining string keys in insertion order. Verified against the source:
+ *
+ * &lt;pre&gt;
+ * Object.entries({2:'a', 1:'b', b:'c', a:'d'})  -&gt;  1, 2, b, a
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;Neither Java map does this: {@code HashMap} is unordered and {@code LinkedHashMap} gives
+ * pure insertion order ({@code 2, 1, b, a}). The builder sorts its parameters alphabetically
+ * before emitting them, so this ordering is usually invisible — but it decides the relative
+ * order of &lt;em&gt;duplicate&lt;/em&gt; keys, which survives the sort because the sort is stable.
+ */
+public final class JsObject {
+
+    private JsObject() {
+    }
+
+    /** One {@code [key, value]} pair from {@code Object.entries}. */
+<span class="fc" id="L29">    public record Entry(String key, Object value) {</span>
+    }
+
+    /** {@code Object.entries(obj)} in JavaScript enumeration order. */
+    public static List&lt;Entry&gt; entries(Map&lt;?, ?&gt; map) {
+<span class="fc" id="L34">        List&lt;Entry&gt; indexKeys = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L35">        List&lt;Entry&gt; stringKeys = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L37" title="All 2 branches covered.">        for (Map.Entry&lt;?, ?&gt; e : map.entrySet()) {</span>
+<span class="fc" id="L38">            String key = String.valueOf(e.getKey());</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">            if (isArrayIndex(key)) {</span>
+<span class="fc" id="L40">                indexKeys.add(new Entry(key, e.getValue()));</span>
+            } else {
+<span class="fc" id="L42">                stringKeys.add(new Entry(key, e.getValue()));</span>
+            }
+<span class="fc" id="L44">        }</span>
+
+<span class="fc" id="L46">        indexKeys.sort((a, b) -&gt; Long.compare(Long.parseLong(a.key()), Long.parseLong(b.key())));</span>
+
+<span class="fc" id="L48">        List&lt;Entry&gt; out = new ArrayList&lt;&gt;(indexKeys.size() + stringKeys.size());</span>
+<span class="fc" id="L49">        out.addAll(indexKeys);</span>
+<span class="fc" id="L50">        out.addAll(stringKeys);</span>
+<span class="fc" id="L51">        return out;</span>
+    }
+
+    /**
+     * An &quot;array index&quot; in the ECMAScript sense: the canonical decimal form of a uint32 below
+     * 2^32-1. {@code &quot;01&quot;} and {@code &quot;1.0&quot;} are ordinary string keys because they are not
+     * canonical, and {@code &quot;-1&quot;} is not an index either.
+     */
+    static boolean isArrayIndex(String key) {
+<span class="fc bfc" id="L60" title="All 4 branches covered.">        if (key.isEmpty() || key.length() &gt; 10) {</span>
+<span class="fc" id="L61">            return false;</span>
+        }
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        for (int i = 0; i &lt; key.length(); i++) {</span>
+<span class="fc bfc" id="L64" title="All 4 branches covered.">            if (key.charAt(i) &lt; '0' || key.charAt(i) &gt; '9') {</span>
+<span class="fc" id="L65">                return false;</span>
+            }
+        }
+<span class="fc bfc" id="L68" title="All 4 branches covered.">        if (key.length() &gt; 1 &amp;&amp; key.charAt(0) == '0') {</span>
+<span class="fc" id="L69">            return false; // not canonical</span>
+        }
+<span class="fc" id="L71">        long value = Long.parseLong(key);</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        return value &lt; 4294967295L;</span>
+    }
+
+    /** A live {@link List} view of any Java array, including primitive arrays. */
+    public static List&lt;Object&gt; arrayToList(Object array) {
+<span class="fc" id="L77">        int length = Array.getLength(array);</span>
+<span class="fc" id="L78">        List&lt;Object&gt; out = new ArrayList&lt;&gt;(length);</span>
+<span class="fc bfc" id="L79" title="All 2 branches covered.">        for (int i = 0; i &lt; length; i++) {</span>
+<span class="fc" id="L80">            out.add(Array.get(array, i));</span>
+        }
+<span class="fc" id="L82">        return out;</span>
+    }
+
+    /** Coerces a JS-array-shaped value ({@link List} or Java array) to a {@link List}. */
+    public static List&lt;?&gt; toList(Object value) {
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        if (value instanceof List&lt;?&gt; list) {</span>
+<span class="fc" id="L88">            return list;</span>
+        }
+<span class="fc" id="L90">        return arrayToList(value);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

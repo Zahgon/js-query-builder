@@ -1,0 +1,9 @@
+io/github/coderello/querybuilder/Query.class
+io/github/coderello/querybuilder/internal/JsUri.class
+io/github/coderello/querybuilder/QueryBuilder.class
+io/github/coderello/querybuilder/internal/JsObject$Entry.class
+io/github/coderello/querybuilder/QueryBuilderException.class
+io/github/coderello/querybuilder/internal/JsValues.class
+io/github/coderello/querybuilder/QueryBuilder$Recurse.class
+io/github/coderello/querybuilder/internal/JsObject.class
+io/github/coderello/querybuilder/internal/JsType.class

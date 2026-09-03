@@ -1,0 +1,9 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+js-query-builder,io.github.coderello.querybuilder,QueryBuilderException,0,3,0,0,0,2,0,1,0,1
+js-query-builder,io.github.coderello.querybuilder,QueryBuilder,0,900,0,68,0,133,0,84,0,48
+js-query-builder,io.github.coderello.querybuilder,Query,0,9,0,0,0,2,0,2,0,2
+js-query-builder,io.github.coderello.querybuilder.internal,JsType,0,65,2,26,0,17,2,15,0,3
+js-query-builder,io.github.coderello.querybuilder.internal,JsUri,0,68,0,6,0,8,0,5,0,2
+js-query-builder,io.github.coderello.querybuilder.internal,JsObject,0,161,0,24,0,30,0,17,0,5
+js-query-builder,io.github.coderello.querybuilder.internal,JsValues,8,303,5,67,2,57,5,37,0,6
+js-query-builder,io.github.coderello.querybuilder.internal,JsObject.Entry,0,9,0,0,0,1,0,1,0,1
